@@ -76,6 +76,52 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+type BillingType = "hourly" | "monthly" | "reserved" | "unknown";
+
+function detectBillingType(flavorName?: string): BillingType {
+  if (!flavorName) return "unknown";
+  const lower = flavorName.toLowerCase();
+  // ConoHa flavor naming: g2l-t-... = 時間課金, g2l-m-... = まとめ払い(月額)
+  if (/-t-/.test(lower) || /\.t\./.test(lower) || lower.includes("hourly")) return "hourly";
+  if (/-m-/.test(lower) || /\.m\./.test(lower) || lower.includes("monthly")) return "monthly";
+  if (/-r-/.test(lower) || /\.r\./.test(lower) || lower.includes("reserved")) return "reserved";
+  return "unknown";
+}
+
+const BILLING_CONFIG: Record<BillingType, { label: string; className: string }> = {
+  hourly: {
+    label: "時間課金",
+    className: "bg-cyan-100 text-cyan-800 border-cyan-300",
+  },
+  monthly: {
+    label: "まとめ払い",
+    className: "bg-purple-100 text-purple-800 border-purple-300",
+  },
+  reserved: {
+    label: "リザーブド",
+    className: "bg-orange-100 text-orange-800 border-orange-300",
+  },
+  unknown: {
+    label: "",
+    className: "",
+  },
+};
+
+function BillingBadge({ flavor }: { flavor: Server["flavor"] }) {
+  const name = flavor.name || flavor.original_name;
+  const billing = detectBillingType(name);
+  if (billing === "unknown") return null;
+  const config = BILLING_CONFIG[billing];
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-300 ${config.className}`}
+    >
+      {config.label}
+    </span>
+  );
+}
+
 function DetailRow({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   if (!value) return null;
   return (
@@ -123,12 +169,41 @@ export default function ServerCard({
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md">
       {/* ヘッダー */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h3 className="text-lg font-bold text-gray-900 truncate mr-3">
           {server.name}
         </h3>
-        <StatusBadge status={loading ? "processing" : server.status} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <BillingBadge flavor={flavor} />
+          <StatusBadge status={loading ? "processing" : server.status} />
+        </div>
       </div>
+
+      {/* スペック行 */}
+      {(flavor.vcpus || flavor.ram || flavor.disk) ? (
+        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+          {flavor.vcpus && (
+            <span className="inline-flex items-center gap-1">
+              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7H7v6h6V7z" /><path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd" /></svg>
+              {flavor.vcpus} vCPU
+            </span>
+          )}
+          {flavor.ram && (
+            <span className="inline-flex items-center gap-1">
+              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v3H3V5zM3 10h14v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2zm2 1a1 1 0 100 2h1a1 1 0 100-2H5z" /></svg>
+              {formatRam(flavor.ram)}
+            </span>
+          )}
+          {flavor.disk != null && (
+            <span className="inline-flex items-center gap-1">
+              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 11.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" /></svg>
+              {flavor.disk} GB
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="mb-3" />
+      )}
 
       {/* IP アドレス */}
       <div className="mb-3 space-y-1 text-sm text-gray-600">
@@ -144,31 +219,6 @@ export default function ServerCard({
           </div>
         ))}
       </div>
-
-      {/* プラン情報（網掛け） */}
-      {(flavor.ram || flavor.vcpus || flavor.disk || flavor.original_name) && (
-        <div className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 space-y-1">
-          {flavor.original_name && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 w-14 shrink-0">プラン</span>
-              <span className="font-medium text-gray-700">{flavor.original_name}</span>
-            </div>
-          )}
-          {(flavor.vcpus || flavor.ram || flavor.disk) && (
-            <div className="flex items-center gap-3">
-              {flavor.vcpus && (
-                <span><span className="text-gray-400">vCPU:</span> {flavor.vcpus}</span>
-              )}
-              {flavor.ram && (
-                <span><span className="text-gray-400">RAM:</span> {formatRam(flavor.ram)}</span>
-              )}
-              {flavor.disk != null && (
-                <span><span className="text-gray-400">Disk:</span> {flavor.disk} GB</span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ホスト（網掛け外） */}
       {host && (
@@ -279,6 +329,7 @@ export default function ServerCard({
             <DetailRow label="ホスト" value={host} mono />
             <DetailRow label="インスタンス名" value={server["OS-EXT-SRV-ATTR:instance_name"]} mono />
             <DetailRow label="イメージID" value={server.image?.id} mono />
+            <DetailRow label="フレーバー" value={flavor.name || flavor.original_name} />
             <DetailRow label="フレーバーID" value={flavor.id} mono />
             {flavor.ephemeral != null && (
               <DetailRow label="Ephemeral" value={`${flavor.ephemeral} GB`} />

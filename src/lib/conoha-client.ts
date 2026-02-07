@@ -124,6 +124,7 @@ export interface Server {
   addresses: Record<string, Array<{ addr: string; version: number; "OS-EXT-IPS-MAC:mac_addr"?: string; "OS-EXT-IPS:type"?: string }>>;
   flavor: {
     id: string;
+    name?: string;
     original_name?: string;
     ram?: number;
     vcpus?: number;
@@ -153,14 +154,62 @@ interface ServersResponse {
   servers: Server[];
 }
 
+export interface FlavorDetail {
+  id: string;
+  name: string;
+  ram: number;
+  vcpus: number;
+  disk: number;
+  ephemeral?: number;
+  swap?: number;
+}
+
+interface FlavorsResponse {
+  flavors: FlavorDetail[];
+}
+
+let flavorCache: Map<string, FlavorDetail> | null = null;
+
+async function getFlavorMap(): Promise<Map<string, FlavorDetail>> {
+  if (flavorCache) return flavorCache;
+
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const data = await apiRequest<FlavorsResponse>(
+    `${endpoints.compute}/flavors/detail`
+  );
+
+  flavorCache = new Map(data.flavors.map((f) => [f.id, f]));
+  // 10分後にキャッシュクリア
+  setTimeout(() => { flavorCache = null; }, 10 * 60 * 1000);
+  return flavorCache;
+}
+
 export async function getServers(): Promise<Server[]> {
   const creds = getCredentials();
   const endpoints = getEndpoints(creds.region);
 
-  const data = await apiRequest<ServersResponse>(
-    `${endpoints.compute}/servers/detail`
-  );
-  return data.servers;
+  const [serverData, flavorMap] = await Promise.all([
+    apiRequest<ServersResponse>(`${endpoints.compute}/servers/detail`),
+    getFlavorMap(),
+  ]);
+
+  return serverData.servers.map((server) => {
+    const detail = flavorMap.get(server.flavor.id);
+    if (detail) {
+      server.flavor = {
+        ...server.flavor,
+        name: detail.name,
+        vcpus: detail.vcpus,
+        ram: detail.ram,
+        disk: detail.disk,
+        ephemeral: detail.ephemeral,
+        swap: detail.swap,
+      };
+    }
+    return server;
+  });
 }
 
 export type ServerAction = "start" | "stop" | "reboot" | "force-stop";
