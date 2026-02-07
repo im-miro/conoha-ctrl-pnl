@@ -8,6 +8,7 @@ import type { ServerAction } from "@/lib/conoha-client";
 interface ServerCardProps {
   server: Server;
   onAction: (serverId: string, action: ServerAction) => Promise<void>;
+  onConsole: (serverId: string) => Promise<void>;
 }
 
 function getIpAddresses(
@@ -22,8 +23,9 @@ function getIpAddresses(
   return result;
 }
 
-export default function ServerCard({ server, onAction }: ServerCardProps) {
+export default function ServerCard({ server, onAction, onConsole }: ServerCardProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [consoleLoading, setConsoleLoading] = useState(false);
 
   const isActive = server.status === "ACTIVE";
   const isShutoff = server.status === "SHUTOFF";
@@ -70,6 +72,28 @@ export default function ServerCard({ server, onAction }: ServerCardProps) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {isActive && (
+          <button
+            onClick={async () => {
+              setConsoleLoading(true);
+              try {
+                await onConsole(server.id);
+              } finally {
+                setConsoleLoading(false);
+              }
+            }}
+            disabled={consoleLoading}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-600 text-white"
+          >
+            {consoleLoading && (
+              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            コンソール
+          </button>
+        )}
         {isShutoff && (
           <ActionButton
             label="起動"

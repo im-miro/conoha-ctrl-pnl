@@ -43,6 +43,21 @@ export default function ServerList() {
     setTimeout(() => mutate(), 2000);
   }
 
+  async function handleConsole(serverId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/console`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`コンソールURL取得に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    const { url } = await res.json();
+    window.open(url, "_blank");
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -100,7 +115,7 @@ export default function ServerList() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {data.servers.map((server) => (
-        <ServerCard key={server.id} server={server} onAction={handleAction} />
+        <ServerCard key={server.id} server={server} onAction={handleAction} onConsole={handleConsole} />
       ))}
     </div>
   );

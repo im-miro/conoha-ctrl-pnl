@@ -162,6 +162,26 @@ export async function executeServerAction(
   );
 }
 
+interface RemoteConsoleResponse {
+  remote_console: { protocol: string; type: string; url: string };
+}
+
+export async function getConsoleUrl(serverId: string): Promise<string> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const data = await apiRequest<RemoteConsoleResponse>(
+    `${endpoints.compute}/servers/${serverId}/remote-consoles`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        remote_console: { protocol: "vnc", type: "novnc" },
+      }),
+    }
+  );
+  return data.remote_console.url;
+}
+
 function getActionBody(action: ServerAction): Record<string, unknown> {
   switch (action) {
     case "start":
