@@ -15,11 +15,16 @@ interface ServerCardProps {
 
 function getIpAddresses(
   addresses: Server["addresses"]
-): { addr: string; version: number }[] {
-  const result: { addr: string; version: number }[] = [];
+): { addr: string; version: number; mac?: string; type?: string }[] {
+  const result: { addr: string; version: number; mac?: string; type?: string }[] = [];
   for (const network of Object.values(addresses)) {
     for (const addr of network) {
-      result.push(addr);
+      result.push({
+        addr: addr.addr,
+        version: addr.version,
+        mac: addr["OS-EXT-IPS-MAC:mac_addr"],
+        type: addr["OS-EXT-IPS:type"],
+      });
     }
   }
   return result;
@@ -29,6 +34,20 @@ function formatRam(mb: number): string {
   if (mb >= 1024) return `${(mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1)} GB`;
   return `${mb} MB`;
 }
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+}
+
+const POWER_STATE: Record<number, string> = {
+  0: "No State",
+  1: "Running",
+  3: "Paused",
+  4: "Shutdown",
+  6: "Crashed",
+  7: "Suspended",
+};
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -57,6 +76,16 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function DetailRow({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start gap-2 py-0.5">
+      <span className="text-gray-400 w-28 shrink-0 text-right">{label}</span>
+      <span className={`text-gray-700 break-all ${mono ? "font-mono" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
 export default function ServerCard({
   server,
   allSecurityGroups,
@@ -69,6 +98,7 @@ export default function ServerCard({
   const [consoleLoading, setConsoleLoading] = useState(false);
   const [sgLoading, setSgLoading] = useState(false);
   const [sgOpen, setSgOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const isActive = server.status === "ACTIVE";
   const isShutoff = server.status === "SHUTOFF";
@@ -191,8 +221,6 @@ export default function ServerCard({
             </span>
           ))}
         </div>
-
-        {/* 追加UI */}
         {sgOpen && availableSGs.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {availableSGs.map((sg) => (
@@ -216,6 +244,88 @@ export default function ServerCard({
                 {sg.name}
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* 詳細情報（折りたたみ） */}
+      <div className="mb-3">
+        <button
+          onClick={() => setDetailOpen(!detailOpen)}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <svg
+            className={`h-3.5 w-3.5 transition-transform duration-200 ${detailOpen ? "rotate-90" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+          </svg>
+          詳細情報
+        </button>
+        {detailOpen && (
+          <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs space-y-0.5">
+            <DetailRow label="サーバーID" value={server.id} mono />
+            <DetailRow label="ステータス" value={server.status} />
+            <DetailRow label="VM状態" value={server["OS-EXT-STS:vm_state"]} />
+            <DetailRow
+              label="電源状態"
+              value={server["OS-EXT-STS:power_state"] != null
+                ? POWER_STATE[server["OS-EXT-STS:power_state"]] ?? String(server["OS-EXT-STS:power_state"])
+                : undefined}
+            />
+            <DetailRow label="タスク" value={server["OS-EXT-STS:task_state"]} />
+            <DetailRow label="AZ" value={server["OS-EXT-AZ:availability_zone"]} />
+            <DetailRow label="ホスト" value={host} mono />
+            <DetailRow label="インスタンス名" value={server["OS-EXT-SRV-ATTR:instance_name"]} mono />
+            <DetailRow label="イメージID" value={server.image?.id} mono />
+            <DetailRow label="フレーバーID" value={flavor.id} mono />
+            {flavor.ephemeral != null && (
+              <DetailRow label="Ephemeral" value={`${flavor.ephemeral} GB`} />
+            )}
+            {(flavor.swap != null && flavor.swap !== 0) && (
+              <DetailRow label="Swap" value={typeof flavor.swap === "number" ? `${flavor.swap} MB` : flavor.swap} />
+            )}
+            <DetailRow label="キー名" value={server.key_name} />
+            <DetailRow label="テナントID" value={server.tenant_id} mono />
+            <DetailRow label="ユーザーID" value={server.user_id} mono />
+            <DetailRow label="作成日時" value={formatDate(server.created)} />
+            <DetailRow label="更新日時" value={formatDate(server.updated)} />
+            {(server["os-extended-volumes:volumes_attached"]?.length ?? 0) > 0 && (
+              <div className="flex items-start gap-2 py-0.5">
+                <span className="text-gray-400 w-28 shrink-0 text-right">ボリューム</span>
+                <div className="space-y-0.5">
+                  {server["os-extended-volumes:volumes_attached"]!.map((v) => (
+                    <div key={v.id} className="font-mono text-gray-700 break-all">{v.id}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {ipAddresses.some((ip) => ip.mac) && (
+              <div className="flex items-start gap-2 py-0.5">
+                <span className="text-gray-400 w-28 shrink-0 text-right">NIC</span>
+                <div className="space-y-0.5">
+                  {ipAddresses.filter((ip) => ip.mac && ip.version === 4).map((ip) => (
+                    <div key={ip.mac} className="text-gray-700">
+                      <span className="font-mono">{ip.mac}</span>
+                      {ip.type && <span className="ml-1.5 text-gray-400">({ip.type})</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {Object.keys(server.metadata).length > 0 && (
+              <div className="flex items-start gap-2 py-0.5">
+                <span className="text-gray-400 w-28 shrink-0 text-right">メタデータ</span>
+                <div className="space-y-0.5">
+                  {Object.entries(server.metadata).map(([k, v]) => (
+                    <div key={k} className="text-gray-700">
+                      <span className="text-gray-400">{k}:</span> {v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -121,20 +121,32 @@ export interface Server {
   id: string;
   name: string;
   status: string;
-  addresses: Record<string, Array<{ addr: string; version: number }>>;
+  addresses: Record<string, Array<{ addr: string; version: number; "OS-EXT-IPS-MAC:mac_addr"?: string; "OS-EXT-IPS:type"?: string }>>;
   flavor: {
     id: string;
     original_name?: string;
     ram?: number;
     vcpus?: number;
     disk?: number;
+    ephemeral?: number;
+    swap?: number;
   };
+  image?: { id: string };
   metadata: Record<string, string>;
   created: string;
   updated: string;
+  key_name?: string;
+  "OS-EXT-STS:task_state"?: string | null;
+  "OS-EXT-STS:vm_state"?: string;
+  "OS-EXT-STS:power_state"?: number;
+  "OS-EXT-AZ:availability_zone"?: string;
+  "os-extended-volumes:volumes_attached"?: Array<{ id: string }>;
   security_groups?: Array<{ name: string }>;
   "OS-EXT-SRV-ATTR:host"?: string;
   "OS-EXT-SRV-ATTR:hypervisor_hostname"?: string;
+  "OS-EXT-SRV-ATTR:instance_name"?: string;
+  tenant_id?: string;
+  user_id?: string;
 }
 
 interface ServersResponse {
