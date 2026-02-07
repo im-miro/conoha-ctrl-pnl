@@ -122,10 +122,18 @@ export interface Server {
   name: string;
   status: string;
   addresses: Record<string, Array<{ addr: string; version: number }>>;
-  flavor: { id: string };
+  flavor: {
+    id: string;
+    original_name?: string;
+    ram?: number;
+    vcpus?: number;
+    disk?: number;
+  };
   metadata: Record<string, string>;
   created: string;
   updated: string;
+  "OS-EXT-SRV-ATTR:host"?: string;
+  "OS-EXT-SRV-ATTR:hypervisor_hostname"?: string;
 }
 
 interface ServersResponse {
