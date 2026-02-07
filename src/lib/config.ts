@@ -11,6 +11,7 @@ export interface ConoHaCredentials {
 export interface ConoHaEndpoints {
   identity: string;
   compute: string;
+  networking: string;
 }
 
 let cachedCredentials: ConoHaCredentials | null = null;
@@ -35,5 +36,6 @@ export function getEndpoints(region: string): ConoHaEndpoints {
   return {
     identity: `https://identity.${region}.conoha.io/v3`,
     compute: `https://compute.${region}.conoha.io/v2.1`,
+    networking: `https://networking.${region}.conoha.io/v2.0`,
   };
 }

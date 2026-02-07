@@ -132,6 +132,7 @@ export interface Server {
   metadata: Record<string, string>;
   created: string;
   updated: string;
+  security_groups?: Array<{ name: string }>;
   "OS-EXT-SRV-ATTR:host"?: string;
   "OS-EXT-SRV-ATTR:hypervisor_hostname"?: string;
 }
@@ -188,6 +189,98 @@ export async function getConsoleUrl(serverId: string): Promise<string> {
     }
   );
   return data.remote_console.url;
+}
+
+// セキュリティグループ
+
+export interface SecurityGroup {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface SecurityGroupsResponse {
+  security_groups: SecurityGroup[];
+}
+
+export async function getSecurityGroups(): Promise<SecurityGroup[]> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const data = await apiRequest<SecurityGroupsResponse>(
+    `${endpoints.networking}/security-groups`
+  );
+  return data.security_groups;
+}
+
+interface Port {
+  id: string;
+  security_groups: string[];
+  device_id: string;
+}
+
+interface PortsResponse {
+  ports: Port[];
+}
+
+interface PortResponse {
+  port: Port;
+}
+
+async function getServerPorts(serverId: string): Promise<Port[]> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const data = await apiRequest<PortsResponse>(
+    `${endpoints.networking}/ports?device_id=${serverId}`
+  );
+  return data.ports;
+}
+
+export async function addSecurityGroup(
+  serverId: string,
+  sgId: string
+): Promise<void> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const ports = await getServerPorts(serverId);
+  for (const port of ports) {
+    if (port.security_groups.includes(sgId)) continue;
+    await apiRequest<PortResponse>(
+      `${endpoints.networking}/ports/${port.id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          port: { security_groups: [...port.security_groups, sgId] },
+        }),
+      }
+    );
+  }
+}
+
+export async function removeSecurityGroup(
+  serverId: string,
+  sgId: string
+): Promise<void> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const ports = await getServerPorts(serverId);
+  for (const port of ports) {
+    if (!port.security_groups.includes(sgId)) continue;
+    await apiRequest<PortResponse>(
+      `${endpoints.networking}/ports/${port.id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          port: {
+            security_groups: port.security_groups.filter((id) => id !== sgId),
+          },
+        }),
+      }
+    );
+  }
 }
 
 function getActionBody(action: ServerAction): Record<string, unknown> {

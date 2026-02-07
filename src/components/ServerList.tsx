@@ -2,25 +2,37 @@
 
 import useSWR from "swr";
 import ServerCard from "./ServerCard";
-import type { Server, ServerAction } from "@/lib/conoha-client";
+import type { Server, ServerAction, SecurityGroup } from "@/lib/conoha-client";
 
 interface ServersResponse {
   servers: Server[];
   error?: string;
 }
 
-const fetcher = (url: string) =>
-  fetch(url).then((res) => res.json()) as Promise<ServersResponse>;
+interface SGResponse {
+  security_groups: SecurityGroup[];
+  error?: string;
+}
+
+const fetcher = <T,>(url: string) =>
+  fetch(url).then((res) => res.json()) as Promise<T>;
 
 export default function ServerList() {
   const { data, error, isLoading, mutate } = useSWR<ServersResponse>(
     "/api/conoha/servers",
-    fetcher,
+    fetcher<ServersResponse>,
     { refreshInterval: 3000 }
   );
 
+  const { data: sgData } = useSWR<SGResponse>(
+    "/api/conoha/security-groups",
+    fetcher<SGResponse>,
+    { refreshInterval: 30000 }
+  );
+
+  const allSGs = sgData?.security_groups ?? [];
+
   async function handleAction(serverId: string, action: ServerAction) {
-    // Optimistic update: 操作中のサーバーを「処理中」に見せる
     if (data?.servers) {
       const optimisticServers = data.servers.map((s) =>
         s.id === serverId ? { ...s, status: "processing" } : s
@@ -39,7 +51,6 @@ export default function ServerList() {
       alert(`操作に失敗しました: ${body.error || "不明なエラー"}`);
     }
 
-    // 少し待ってから再取得（APIの状態反映を待つ）
     setTimeout(() => mutate(), 2000);
   }
 
@@ -58,28 +69,45 @@ export default function ServerList() {
     window.open(url, "_blank");
   }
 
+  async function handleAddSG(serverId: string, sgId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/security-groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sgId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`セキュリティグループ追加に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    mutate();
+  }
+
+  async function handleRemoveSG(serverId: string, sgId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/security-groups`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sgId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`セキュリティグループ削除に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    mutate();
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex items-center gap-3 text-gray-500">
-          <svg
-            className="h-6 w-6 animate-spin"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
+          <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           サーバー一覧を取得中...
         </div>
@@ -115,7 +143,15 @@ export default function ServerList() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {data.servers.map((server) => (
-        <ServerCard key={server.id} server={server} onAction={handleAction} onConsole={handleConsole} />
+        <ServerCard
+          key={server.id}
+          server={server}
+          allSecurityGroups={allSGs}
+          onAction={handleAction}
+          onConsole={handleConsole}
+          onAddSG={handleAddSG}
+          onRemoveSG={handleRemoveSG}
+        />
       ))}
     </div>
   );

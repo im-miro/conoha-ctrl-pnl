@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import StatusBadge from "./StatusBadge";
-import type { Server } from "@/lib/conoha-client";
-import type { ServerAction } from "@/lib/conoha-client";
+import type { Server, ServerAction, SecurityGroup } from "@/lib/conoha-client";
 
 interface ServerCardProps {
   server: Server;
+  allSecurityGroups: SecurityGroup[];
   onAction: (serverId: string, action: ServerAction) => Promise<void>;
   onConsole: (serverId: string) => Promise<void>;
+  onAddSG: (serverId: string, sgId: string) => Promise<void>;
+  onRemoveSG: (serverId: string, sgId: string) => Promise<void>;
 }
 
 function getIpAddresses(
@@ -55,9 +57,18 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export default function ServerCard({ server, onAction, onConsole }: ServerCardProps) {
+export default function ServerCard({
+  server,
+  allSecurityGroups,
+  onAction,
+  onConsole,
+  onAddSG,
+  onRemoveSG,
+}: ServerCardProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [consoleLoading, setConsoleLoading] = useState(false);
+  const [sgLoading, setSgLoading] = useState(false);
+  const [sgOpen, setSgOpen] = useState(false);
 
   const isActive = server.status === "ACTIVE";
   const isShutoff = server.status === "SHUTOFF";
@@ -66,6 +77,9 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
   const ipAddresses = getIpAddresses(server.addresses);
   const host = server["OS-EXT-SRV-ATTR:host"] || server["OS-EXT-SRV-ATTR:hypervisor_hostname"];
   const { flavor } = server;
+  const currentSGNames = new Set((server.security_groups ?? []).map((sg) => sg.name));
+  const currentSGs = allSecurityGroups.filter((sg) => currentSGNames.has(sg.name));
+  const availableSGs = allSecurityGroups.filter((sg) => !currentSGNames.has(sg.name));
 
   async function handleAction(action: ServerAction) {
     setLoading(action);
@@ -78,6 +92,7 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md">
+      {/* ヘッダー */}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-lg font-bold text-gray-900 truncate mr-3">
           {server.name}
@@ -85,6 +100,7 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
         <StatusBadge status={loading ? "processing" : server.status} />
       </div>
 
+      {/* IP アドレス */}
       <div className="mb-3 space-y-1 text-sm text-gray-600">
         {ipAddresses.map((ip) => (
           <div key={ip.addr} className="flex items-center gap-2">
@@ -99,7 +115,8 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
         ))}
       </div>
 
-      {(flavor.ram || flavor.vcpus || flavor.disk || flavor.original_name || host) && (
+      {/* プラン情報（網掛け） */}
+      {(flavor.ram || flavor.vcpus || flavor.disk || flavor.original_name) && (
         <div className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 space-y-1">
           {flavor.original_name && (
             <div className="flex items-center gap-2">
@@ -120,15 +137,90 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
               )}
             </div>
           )}
-          {host && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 w-14 shrink-0">ホスト</span>
-              <span className="font-mono truncate">{host}</span>
-            </div>
-          )}
         </div>
       )}
 
+      {/* ホスト（網掛け外） */}
+      {host && (
+        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+          <span className="text-gray-400">ホスト:</span>
+          <span className="font-mono">{host}</span>
+        </div>
+      )}
+
+      {/* セキュリティグループ */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-gray-400">セキュリティグループ</span>
+          <button
+            onClick={() => setSgOpen(!sgOpen)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            {sgOpen ? "閉じる" : "編集"}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {currentSGs.length === 0 && (
+            <span className="text-xs text-gray-400">なし</span>
+          )}
+          {currentSGs.map((sg) => (
+            <span
+              key={sg.id}
+              className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs text-indigo-700"
+            >
+              {sg.name}
+              {sgOpen && (
+                <button
+                  onClick={async () => {
+                    setSgLoading(true);
+                    try {
+                      await onRemoveSG(server.id, sg.id);
+                    } finally {
+                      setSgLoading(false);
+                    }
+                  }}
+                  disabled={sgLoading}
+                  className="ml-0.5 text-indigo-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                  title="削除"
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+
+        {/* 追加UI */}
+        {sgOpen && availableSGs.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {availableSGs.map((sg) => (
+              <button
+                key={sg.id}
+                onClick={async () => {
+                  setSgLoading(true);
+                  try {
+                    await onAddSG(server.id, sg.id);
+                  } finally {
+                    setSgLoading(false);
+                  }
+                }}
+                disabled={sgLoading}
+                className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                title={sg.description || sg.name}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                {sg.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* アクションボタン */}
       <div className="flex flex-wrap gap-2">
         {isActive && (
           <button
@@ -190,24 +282,9 @@ export default function ServerCard({ server, onAction, onConsole }: ServerCardPr
         )}
         {isTransitioning && (
           <span className="text-sm text-yellow-600 flex items-center gap-1">
-            <svg
-              className="h-4 w-4 animate-spin"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-              />
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             処理中...
           </span>
@@ -240,24 +317,9 @@ function ActionButton({
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       {isLoading && (
-        <svg
-          className="h-3.5 w-3.5 animate-spin"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
+        <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
       )}
       {label}
