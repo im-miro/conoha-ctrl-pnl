@@ -153,6 +153,8 @@ export default function ServerCard({
   const ipAddresses = getIpAddresses(server.addresses);
   const host = server["OS-EXT-SRV-ATTR:host"] || server["OS-EXT-SRV-ATTR:hypervisor_hostname"];
   const { flavor } = server;
+  const totalVolumeSizeGB = (server.volumes ?? []).reduce((sum, v) => sum + v.size, 0);
+  const diskDisplay = flavor.disk ? flavor.disk : totalVolumeSizeGB || null;
   const currentSGNames = new Set((server.security_groups ?? []).map((sg) => sg.name));
   const currentSGs = allSecurityGroups.filter((sg) => currentSGNames.has(sg.name));
   const availableSGs = allSecurityGroups.filter((sg) => !currentSGNames.has(sg.name));
@@ -180,7 +182,7 @@ export default function ServerCard({
       </div>
 
       {/* スペック行 */}
-      {(flavor.vcpus || flavor.ram || flavor.disk) ? (
+      {(flavor.vcpus || flavor.ram || diskDisplay) ? (
         <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
           {flavor.vcpus && (
             <span className="inline-flex items-center gap-1">
@@ -194,10 +196,10 @@ export default function ServerCard({
               {formatRam(flavor.ram)}
             </span>
           )}
-          {flavor.disk != null && (
+          {diskDisplay && (
             <span className="inline-flex items-center gap-1">
               <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 11.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" /></svg>
-              {flavor.disk} GB
+              {diskDisplay} GB{!flavor.disk && totalVolumeSizeGB ? " (Volume)" : ""}
             </span>
           )}
         </div>
@@ -342,12 +344,19 @@ export default function ServerCard({
             <DetailRow label="ユーザーID" value={server.user_id} mono />
             <DetailRow label="作成日時" value={formatDate(server.created)} />
             <DetailRow label="更新日時" value={formatDate(server.updated)} />
-            {(server["os-extended-volumes:volumes_attached"]?.length ?? 0) > 0 && (
+            {(server.volumes ?? []).length > 0 && (
               <div className="flex items-start gap-2 py-0.5">
                 <span className="text-gray-400 w-28 shrink-0 text-right">ボリューム</span>
-                <div className="space-y-0.5">
-                  {server["os-extended-volumes:volumes_attached"]!.map((v) => (
-                    <div key={v.id} className="font-mono text-gray-700 break-all">{v.id}</div>
+                <div className="space-y-1">
+                  {server.volumes!.map((v) => (
+                    <div key={v.id} className="text-gray-700">
+                      <span className="font-medium">{v.size} GB</span>
+                      <span className="ml-1.5 text-gray-400">({v.status})</span>
+                      {v.volume_type && <span className="ml-1.5 text-gray-400">[{v.volume_type}]</span>}
+                      {v.bootable === "true" && <span className="ml-1.5 text-xs text-orange-500">boot</span>}
+                      {v.name && <span className="ml-1.5">{v.name}</span>}
+                      <div className="font-mono text-gray-400 text-[10px] break-all">{v.id}</div>
+                    </div>
                   ))}
                 </div>
               </div>

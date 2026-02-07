@@ -142,6 +142,7 @@ export interface Server {
   "OS-EXT-STS:power_state"?: number;
   "OS-EXT-AZ:availability_zone"?: string;
   "os-extended-volumes:volumes_attached"?: Array<{ id: string }>;
+  volumes?: VolumeDetail[];
   security_groups?: Array<{ name: string }>;
   "OS-EXT-SRV-ATTR:host"?: string;
   "OS-EXT-SRV-ATTR:hypervisor_hostname"?: string;
@@ -186,13 +187,37 @@ async function getFlavorMap(): Promise<Map<string, FlavorDetail>> {
   return flavorCache;
 }
 
+export interface VolumeDetail {
+  id: string;
+  name: string | null;
+  size: number;
+  status: string;
+  volume_type?: string;
+  bootable?: string;
+}
+
+interface VolumesResponse {
+  volumes: VolumeDetail[];
+}
+
+async function getVolumeMap(): Promise<Map<string, VolumeDetail>> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const data = await apiRequest<VolumesResponse>(
+    `${endpoints.blockStorage}/${creds.tenantId}/volumes/detail`
+  );
+  return new Map(data.volumes.map((v) => [v.id, v]));
+}
+
 export async function getServers(): Promise<Server[]> {
   const creds = getCredentials();
   const endpoints = getEndpoints(creds.region);
 
-  const [serverData, flavorMap] = await Promise.all([
+  const [serverData, flavorMap, volumeMap] = await Promise.all([
     apiRequest<ServersResponse>(`${endpoints.compute}/servers/detail`),
     getFlavorMap(),
+    getVolumeMap(),
   ]);
 
   return serverData.servers.map((server) => {
@@ -208,6 +233,12 @@ export async function getServers(): Promise<Server[]> {
         swap: detail.swap,
       };
     }
+
+    const attachedIds = server["os-extended-volumes:volumes_attached"] ?? [];
+    server.volumes = attachedIds
+      .map((v) => volumeMap.get(v.id))
+      .filter((v): v is VolumeDetail => v != null);
+
     return server;
   });
 }
