@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ConoHa VPS コントロールパネル",
   description: "ConoHa VPS サーバー管理ダッシュボード",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
