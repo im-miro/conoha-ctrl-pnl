@@ -494,14 +494,15 @@ export default function ServerCard({
       )}
 
       {/* アクションボタン */}
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {isShutoff && (
           <ActionButton
             label="起動"
             action="start"
             loading={loading}
             onClick={() => handleAction("start")}
-            className="bg-green-600 hover:bg-green-700 text-white"
+            variant="solid"
+            color="green"
           />
         )}
         {isActive && (
@@ -511,14 +512,16 @@ export default function ServerCard({
               action="stop"
               loading={loading}
               onClick={() => handleAction("stop")}
-              className="bg-gray-600 hover:bg-gray-700 text-white"
+              variant="outline"
+              color="gray"
             />
             <ActionButton
               label="再起動"
               action="reboot"
               loading={loading}
               onClick={() => handleAction("reboot")}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              variant="outline"
+              color="blue"
             />
           </>
         )}
@@ -528,11 +531,15 @@ export default function ServerCard({
             action="force-stop"
             loading={loading}
             onClick={() => handleAction("force-stop")}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            variant="outline"
+            color="red"
           />
         )}
         {isActive && (
-          <button
+          <ActionButton
+            label="コンソール"
+            action="console"
+            loading={consoleLoading ? "console" : null}
             onClick={async () => {
               setConsoleLoading(true);
               try {
@@ -541,31 +548,24 @@ export default function ServerCard({
                 setConsoleLoading(false);
               }
             }}
-            disabled={consoleLoading}
-            className="w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-600 text-white"
-          >
-            {consoleLoading && (
-              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            )}
-            コンソール
-          </button>
+            variant="outline"
+            color="amber"
+            icon={<svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm2 0h10v8H5V5z" clipRule="evenodd" /><path d="M7 7l2 2-2 2" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+          />
         )}
         {(isActive || isShutoff) && (
-          <button
+          <ActionButton
+            label="グラフ"
+            action="graph"
+            loading={null}
             onClick={() => window.open(`/graphs/${server.id}`, "_blank")}
-            className="w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 bg-indigo-500 hover:bg-indigo-600 text-white"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-            </svg>
-            グラフ
-          </button>
+            variant="outline"
+            color="indigo"
+            icon={<svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" /></svg>}
+          />
         )}
         {isTransitioning && (
-          <span className="text-sm text-yellow-600 flex items-center justify-center gap-1 py-2">
+          <span className="col-span-2 text-sm text-yellow-600 flex items-center justify-center gap-1.5 py-2">
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -578,34 +578,77 @@ export default function ServerCard({
   );
 }
 
+type ButtonColor = "green" | "gray" | "blue" | "red" | "amber" | "indigo";
+type ButtonVariant = "solid" | "outline" | "ghost";
+
+const COLOR_STYLES: Record<ButtonColor, Record<ButtonVariant, string>> = {
+  green: {
+    solid: "bg-green-600 hover:bg-green-700 text-white shadow-sm",
+    outline: "border border-green-300 text-green-700 hover:bg-green-50",
+    ghost: "text-green-700 hover:bg-green-50",
+  },
+  gray: {
+    solid: "bg-gray-600 hover:bg-gray-700 text-white shadow-sm",
+    outline: "border border-gray-300 text-gray-700 hover:bg-gray-50",
+    ghost: "text-gray-600 hover:bg-gray-100",
+  },
+  blue: {
+    solid: "bg-blue-600 hover:bg-blue-700 text-white shadow-sm",
+    outline: "border border-blue-300 text-blue-700 hover:bg-blue-50",
+    ghost: "text-blue-700 hover:bg-blue-50",
+  },
+  red: {
+    solid: "bg-red-600 hover:bg-red-700 text-white shadow-sm",
+    outline: "border border-red-300 text-red-700 hover:bg-red-50",
+    ghost: "text-red-600 hover:bg-red-50",
+  },
+  amber: {
+    solid: "bg-amber-500 hover:bg-amber-600 text-white shadow-sm",
+    outline: "border border-amber-300 text-amber-700 hover:bg-amber-50",
+    ghost: "text-amber-700 hover:bg-amber-50",
+  },
+  indigo: {
+    solid: "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm",
+    outline: "border border-indigo-300 text-indigo-700 hover:bg-indigo-50",
+    ghost: "text-indigo-700 hover:bg-indigo-50",
+  },
+};
+
 function ActionButton({
   label,
   action,
   loading,
   onClick,
-  className,
+  variant = "solid",
+  color = "gray",
+  icon,
 }: {
   label: string;
   action: string;
   loading: string | null;
   onClick: () => void;
-  className: string;
+  variant?: ButtonVariant;
+  color?: ButtonColor;
+  icon?: React.ReactNode;
 }) {
   const isLoading = loading === action;
   const isDisabled = loading !== null;
+  const colorClass = COLOR_STYLES[color][variant];
 
   return (
     <button
       onClick={onClick}
       disabled={isDisabled}
-      className={`w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${colorClass}`}
     >
-      {isLoading && (
+      {isLoading ? (
         <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-      )}
+      ) : icon ? (
+        icon
+      ) : null}
       {label}
     </button>
   );

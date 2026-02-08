@@ -79,9 +79,14 @@ function formatBytes(bytes: number | null): string {
 
 function buildParams(range: RangeKey): string {
   const r = RANGES.find((r) => r.key === range)!;
-  const end = Math.floor(Date.now() / 1000);
+  // 60秒単位に丸めてSWRキーの無限更新を防止
+  const end = Math.floor(Date.now() / 60000) * 60;
   const start = end - r.seconds;
   return `start=${start}&end=${end}&mode=AVERAGE`;
+}
+
+function hasNonNullValues(data: (number | null)[][], valueIndices: number[]): boolean {
+  return data.some((row) => valueIndices.some((i) => row[i] != null));
 }
 
 function Spinner() {
@@ -128,8 +133,8 @@ function CpuChart({ serverId, range }: { serverId: string; range: RangeKey }) {
   if (isLoading) return <Spinner />;
   if (error || data?.error)
     return <ErrorBox message={data?.error || "CPU データ取得に失敗しました"} />;
-  if (!data?.cpu?.data?.length)
-    return <ErrorBox message="CPU データがありません" />;
+  if (!data?.cpu?.data?.length || !hasNonNullValues(data.cpu.data, [1]))
+    return <ErrorBox message="CPU データがありません（サーバーが停止中の可能性があります）" />;
 
   // ConoHa APIはvCPU合算値を返す場合がある(2vCPU→最大200%)
   // schemaからvCPU数は取れないのでmax値から推定して正規化
@@ -211,8 +216,8 @@ function DiskChart({
     return (
       <ErrorBox message={data?.error || "ディスクIO データ取得に失敗しました"} />
     );
-  if (!data?.disk?.data?.length)
-    return <ErrorBox message="ディスクIO データがありません" />;
+  if (!data?.disk?.data?.length || !hasNonNullValues(data.disk.data, [1, 2]))
+    return <ErrorBox message="ディスクIO データがありません（サーバーが停止中の可能性があります）" />;
 
   const chartData = data.disk.data
     .filter((row) => row[0] != null)
@@ -295,8 +300,8 @@ function NetworkChart({
         message={data?.error || "ネットワーク データ取得に失敗しました"}
       />
     );
-  if (!data?.interface?.data?.length)
-    return <ErrorBox message="ネットワーク データがありません" />;
+  if (!data?.interface?.data?.length || !hasNonNullValues(data.interface.data, [1, 2]))
+    return <ErrorBox message="ネットワーク データがありません（サーバーが停止中の可能性があります）" />;
 
   const chartData = data.interface.data
     .filter((row) => row[0] != null)

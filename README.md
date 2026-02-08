@@ -1,52 +1,76 @@
 # conoha-ctrl-pnl
 
-ConoHa 向けのコントロールパネル（Web UI）プロジェクトです。
+ConoHa VPS のサーバーを管理する Web コントロールパネルです。サーバーの起動・停止・再起動、プラン変更（リサイズ）、セキュリティグループ管理、VNCコンソール接続、リソースモニタリング（CPU / ディスクIO / ネットワーク）を一画面で操作できます。
 
 - Framework: Next.js (App Router)
 - Runtime: React 19
 - Styling: Tailwind CSS v4
 - Data Fetching: SWR
-
-> TODO: ここに「何を管理する画面か」「対象ユーザー」「主要機能」を1〜3行で追記してください。
+- Charts: Recharts
 
 ---
 
 ## Requirements
 
-- Node.js 20+（推奨）
-- npm / yarn / pnpm / bun のいずれか
+- Node.js 20+
+- npm
 
 ---
 
 ## Getting Started
 
-依存関係のインストール:
+### 1. 依存関係のインストール
 
 ```bash
 npm install
-# or
-yarn
-# or
-pnpm install
-# or
-bun install
 ```
 
-開発サーバ起動（Turbopack）:
+### 2. 認証情報の設定
+
+`config/conoha-credentials.example.json` をコピーして `config/conoha-credentials.json` を作成し、ConoHa API の認証情報を記入します。
+
+```bash
+cp config/conoha-credentials.example.json config/conoha-credentials.json
+```
+
+```json
+{
+  "apiUser": "gncu12345678",
+  "apiPassword": "your-api-password",
+  "tenantId": "your-tenant-id",
+  "region": "tyo3"
+}
+```
+
+### 3. 開発サーバ起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-ブラウザでアクセス:
+ブラウザで http://localhost:3000 にアクセスします。
 
-- http://localhost:3000
+---
+
+## Features
+
+### サーバー管理
+- サーバー一覧表示（ステータス、スペック、IPアドレス、ホスト情報）
+- 起動 / 停止 / 再起動 / 強制停止
+- VNC コンソール接続
+
+### プラン変更（リサイズ）
+- 停止中のサーバーのフレーバーを変更
+- リサイズ後の確認 / 取消操作
+
+### セキュリティグループ
+- サーバーに紐づくセキュリティグループの確認・追加・削除
+
+### リソースモニタリング（`/graphs/[id]`）
+- CPU 使用率（エリアチャート）
+- ディスク I/O - Read / Write（ラインチャート）
+- ネットワークトラフィック - RX / TX（ラインチャート）
+- 期間選択: 1時間 / 6時間 / 24時間 / 7日
 
 ---
 
@@ -63,27 +87,35 @@ bun dev
 
 ## Project Structure
 
-Next.js App Router 構成です。
-
-- `app/` : ルーティングとページ/UI（例: `app/page.tsx`）
-- `public/` : 静的ファイル
-
-> TODO: 実際のディレクトリ構成（components/, lib/, services/ など）があるならここに追記します。
-
----
-
-## Environment Variables
-
-現時点では `.env` の定義が未提示のため、必要になりそうな雛形だけ置いてあります。
-
-`.env.local` を作成し、必要に応じて追記してください。
-
-```bash
-# 例）バックエンドAPIを叩く場合
-NEXT_PUBLIC_API_BASE_URL=http://localhost:xxxx
 ```
-
-> TODO: 実際に参照している環境変数があれば `.env.example` を作り、この項目を確定させるのがおすすめです。
+src/
+├── app/
+│   ├── page.tsx                        # メインページ
+│   ├── graphs/[id]/page.tsx            # グラフ表示ページ
+│   └── api/conoha/
+│       ├── servers/route.ts            # サーバー一覧
+│       ├── flavors/route.ts            # フレーバー一覧
+│       ├── security-groups/route.ts    # セキュリティグループ一覧
+│       └── servers/[id]/
+│           ├── action/route.ts         # 起動/停止/再起動
+│           ├── console/route.ts        # VNCコンソール
+│           ├── resize/route.ts         # リサイズ実行
+│           ├── resize-confirm/route.ts # リサイズ確認/取消
+│           ├── security-groups/route.ts
+│           └── graphs/
+│               ├── cpu/route.ts        # CPUグラフデータ
+│               ├── disk/route.ts       # ディスクIOグラフデータ
+│               └── network/route.ts    # ネットワークグラフデータ
+├── components/
+│   ├── ServerList.tsx                  # サーバー一覧コンポーネント
+│   ├── ServerCard.tsx                  # サーバーカード
+│   └── StatusBadge.tsx                 # ステータスバッジ
+├── lib/
+│   ├── conoha-client.ts               # ConoHa API クライアント
+│   └── config.ts                      # 認証情報・エンドポイント設定
+config/
+└── conoha-credentials.json            # API認証情報（git管理外）
+```
 
 ---
 
@@ -94,26 +126,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:xxxx
 - TypeScript
 - Tailwind CSS v4
 - SWR
-
----
-
-## Lint / Formatting
-
-- ESLint: `npm run lint`
-
-> TODO: formatter（Prettier 等）を導入している場合はここに追記。
-
----
-
-## Deployment
-
-一般的な Next.js アプリとしてデプロイできます。
-
-- Vercel
-- Node.js サーバ（`npm run build` → `npm run start`）
-- コンテナ化（必要なら Dockerfile 追加）
-
-> TODO: 実際のデプロイ先・手順（社内基盤/CI/CD/環境変数/ビルド方式）に合わせて確定させます。
+- Recharts
 
 ---
 
