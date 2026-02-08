@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import StatusBadge from "./StatusBadge";
-import type { Server, ServerAction, SecurityGroup } from "@/lib/conoha-client";
+import type { Server, ServerAction, SecurityGroup, FlavorDetail } from "@/lib/conoha-client";
 
 interface ServerCardProps {
   server: Server;
   allSecurityGroups: SecurityGroup[];
+  flavors: FlavorDetail[];
   onAction: (serverId: string, action: ServerAction) => Promise<void>;
   onConsole: (serverId: string) => Promise<void>;
   onAddSG: (serverId: string, sgId: string) => Promise<void>;
   onRemoveSG: (serverId: string, sgId: string) => Promise<void>;
+  onResize: (serverId: string, flavorId: string) => Promise<void>;
+  onConfirmResize: (serverId: string) => Promise<void>;
+  onRevertResize: (serverId: string) => Promise<void>;
 }
 
 function getIpAddresses(
@@ -135,20 +139,27 @@ function DetailRow({ label, value, mono }: { label: string; value?: string | nul
 export default function ServerCard({
   server,
   allSecurityGroups,
+  flavors,
   onAction,
   onConsole,
   onAddSG,
   onRemoveSG,
+  onResize,
+  onConfirmResize,
+  onRevertResize,
 }: ServerCardProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [consoleLoading, setConsoleLoading] = useState(false);
   const [sgLoading, setSgLoading] = useState(false);
   const [sgOpen, setSgOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [resizeOpen, setResizeOpen] = useState(false);
+  const [resizeLoading, setResizeLoading] = useState(false);
 
   const isActive = server.status === "ACTIVE";
   const isShutoff = server.status === "SHUTOFF";
-  const isTransitioning = !isActive && !isShutoff && server.status !== "ERROR";
+  const isVerifyResize = server.status === "VERIFY_RESIZE";
+  const isTransitioning = !isActive && !isShutoff && !isVerifyResize && server.status !== "ERROR";
 
   const ipAddresses = getIpAddresses(server.addresses);
   const host = server["OS-EXT-SRV-ATTR:host"] || server["OS-EXT-SRV-ATTR:hypervisor_hostname"];
@@ -390,30 +401,100 @@ export default function ServerCard({
         )}
       </div>
 
-      {/* アクションボタン */}
-      <div className="flex flex-wrap gap-2">
-        {isActive && (
+      {/* リサイズ（プラン変更）UI */}
+      {isShutoff && (
+        <div className="mb-3">
           <button
-            onClick={async () => {
-              setConsoleLoading(true);
-              try {
-                await onConsole(server.id);
-              } finally {
-                setConsoleLoading(false);
-              }
-            }}
-            disabled={consoleLoading}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-600 text-white"
+            onClick={() => setResizeOpen(!resizeOpen)}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
           >
-            {consoleLoading && (
-              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            )}
-            コンソール
+            <svg
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${resizeOpen ? "rotate-90" : ""}`}
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+            </svg>
+            プラン変更
           </button>
-        )}
+          {resizeOpen && (
+            <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+              <p className="text-xs text-gray-500 mb-2">変更先のプランを選択してください</p>
+              <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
+                {flavors
+                  .filter((f) => f.id !== server.flavor.id)
+                  .map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={async () => {
+                        setResizeLoading(true);
+                        try {
+                          await onResize(server.id, f.id);
+                          setResizeOpen(false);
+                        } finally {
+                          setResizeLoading(false);
+                        }
+                      }}
+                      disabled={resizeLoading}
+                      className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-xs hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50 transition-colors text-left"
+                    >
+                      <span className="font-medium text-gray-800">{f.name}</span>
+                      <span className="text-gray-500 ml-2 shrink-0">
+                        {f.vcpus}vCPU / {formatRam(f.ram)} / {f.disk}GB
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VERIFY_RESIZE 確認・取消 */}
+      {isVerifyResize && (
+        <div className="mb-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+          <p className="text-xs text-yellow-800 mb-2 font-medium">リサイズの確認が必要です</p>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setResizeLoading(true);
+                try {
+                  await onConfirmResize(server.id);
+                } finally {
+                  setResizeLoading(false);
+                }
+              }}
+              disabled={resizeLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors"
+            >
+              {resizeLoading && (
+                <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+              確認（適用）
+            </button>
+            <button
+              onClick={async () => {
+                setResizeLoading(true);
+                try {
+                  await onRevertResize(server.id);
+                } finally {
+                  setResizeLoading(false);
+                }
+              }}
+              disabled={resizeLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white disabled:opacity-50 transition-colors"
+            >
+              取消（元に戻す）
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* アクションボタン */}
+      <div className="flex flex-col gap-2">
         {isShutoff && (
           <ActionButton
             label="起動"
@@ -450,8 +531,41 @@ export default function ServerCard({
             className="bg-red-600 hover:bg-red-700 text-white"
           />
         )}
+        {isActive && (
+          <button
+            onClick={async () => {
+              setConsoleLoading(true);
+              try {
+                await onConsole(server.id);
+              } finally {
+                setConsoleLoading(false);
+              }
+            }}
+            disabled={consoleLoading}
+            className="w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-600 text-white"
+          >
+            {consoleLoading && (
+              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            コンソール
+          </button>
+        )}
+        {(isActive || isShutoff) && (
+          <button
+            onClick={() => window.open(`/graphs/${server.id}`, "_blank")}
+            className="w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 bg-indigo-500 hover:bg-indigo-600 text-white"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+            </svg>
+            グラフ
+          </button>
+        )}
         {isTransitioning && (
-          <span className="text-sm text-yellow-600 flex items-center gap-1">
+          <span className="text-sm text-yellow-600 flex items-center justify-center gap-1 py-2">
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -484,7 +598,7 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={isDisabled}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`w-full justify-center inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       {isLoading && (
         <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">

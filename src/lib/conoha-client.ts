@@ -375,6 +375,140 @@ export async function removeSecurityGroup(
   }
 }
 
+// リサイズ
+
+export async function resizeServer(
+  serverId: string,
+  flavorId: string
+): Promise<void> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  await apiRequest<void>(
+    `${endpoints.compute}/servers/${serverId}/action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ resize: { flavorRef: flavorId } }),
+    }
+  );
+}
+
+export async function confirmResize(serverId: string): Promise<void> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  await apiRequest<void>(
+    `${endpoints.compute}/servers/${serverId}/action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ confirmResize: null }),
+    }
+  );
+}
+
+export async function revertResize(serverId: string): Promise<void> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  await apiRequest<void>(
+    `${endpoints.compute}/servers/${serverId}/action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ revertResize: null }),
+    }
+  );
+}
+
+export async function getFlavorList(): Promise<FlavorDetail[]> {
+  const map = await getFlavorMap();
+  return Array.from(map.values());
+}
+
+// グラフ
+
+export interface GraphData {
+  schema: string[];
+  data: (number | null)[][];
+}
+
+export interface CpuGraphResponse {
+  cpu: GraphData;
+}
+
+export interface DiskGraphResponse {
+  disk: GraphData;
+}
+
+export interface NetworkGraphResponse {
+  interface: GraphData;
+}
+
+export async function getCpuGraph(
+  serverId: string,
+  start?: string,
+  end?: string,
+  mode?: string
+): Promise<CpuGraphResponse> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const params = new URLSearchParams();
+  if (start) params.set("start_date_raw", start);
+  if (end) params.set("end_date_raw", end);
+  if (mode) params.set("mode", mode);
+
+  const qs = params.toString();
+  return apiRequest<CpuGraphResponse>(
+    `${endpoints.compute}/servers/${serverId}/rrd/cpu${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getDiskGraph(
+  serverId: string,
+  device?: string,
+  start?: string,
+  end?: string,
+  mode?: string
+): Promise<DiskGraphResponse> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const params = new URLSearchParams();
+  if (device) params.set("device_name", device);
+  if (start) params.set("start_date_raw", start);
+  if (end) params.set("end_date_raw", end);
+  if (mode) params.set("mode", mode);
+
+  const qs = params.toString();
+  return apiRequest<DiskGraphResponse>(
+    `${endpoints.compute}/servers/${serverId}/rrd/disk${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getNetworkGraph(
+  serverId: string,
+  portId: string,
+  start?: string,
+  end?: string,
+  mode?: string
+): Promise<NetworkGraphResponse> {
+  const creds = getCredentials();
+  const endpoints = getEndpoints(creds.region);
+
+  const params = new URLSearchParams();
+  params.set("port_id", portId);
+  if (start) params.set("start_date_raw", start);
+  if (end) params.set("end_date_raw", end);
+  if (mode) params.set("mode", mode);
+
+  const qs = params.toString();
+  return apiRequest<NetworkGraphResponse>(
+    `${endpoints.compute}/servers/${serverId}/rrd/interface?${qs}`
+  );
+}
+
+export { getServerPorts };
+
 function getActionBody(action: ServerAction): Record<string, unknown> {
   switch (action) {
     case "start":

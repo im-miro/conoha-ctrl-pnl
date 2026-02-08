@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import ServerCard from "./ServerCard";
-import type { Server, ServerAction, SecurityGroup } from "@/lib/conoha-client";
+import type { Server, ServerAction, SecurityGroup, FlavorDetail } from "@/lib/conoha-client";
 
 interface ServersResponse {
   servers: Server[];
@@ -11,6 +11,11 @@ interface ServersResponse {
 
 interface SGResponse {
   security_groups: SecurityGroup[];
+  error?: string;
+}
+
+interface FlavorsResponse {
+  flavors: FlavorDetail[];
   error?: string;
 }
 
@@ -30,7 +35,14 @@ export default function ServerList() {
     { refreshInterval: 30000 }
   );
 
+  const { data: flavorData } = useSWR<FlavorsResponse>(
+    "/api/conoha/flavors",
+    fetcher<FlavorsResponse>,
+    { refreshInterval: 60000 }
+  );
+
   const allSGs = sgData?.security_groups ?? [];
+  const allFlavors = flavorData?.flavors ?? [];
 
   async function handleAction(serverId: string, action: ServerAction) {
     if (data?.servers) {
@@ -101,6 +113,50 @@ export default function ServerList() {
     mutate();
   }
 
+  async function handleResize(serverId: string, flavorId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/resize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flavorId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`プラン変更に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    setTimeout(() => mutate(), 2000);
+  }
+
+  async function handleConfirmResize(serverId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/resize-confirm`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`リサイズ確認に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    setTimeout(() => mutate(), 2000);
+  }
+
+  async function handleRevertResize(serverId: string) {
+    const res = await fetch(`/api/conoha/servers/${serverId}/resize-confirm`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      alert(`リサイズ取消に失敗しました: ${body.error || "不明なエラー"}`);
+      return;
+    }
+
+    setTimeout(() => mutate(), 2000);
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -147,10 +203,14 @@ export default function ServerList() {
           key={server.id}
           server={server}
           allSecurityGroups={allSGs}
+          flavors={allFlavors}
           onAction={handleAction}
           onConsole={handleConsole}
           onAddSG={handleAddSG}
           onRemoveSG={handleRemoveSG}
+          onResize={handleResize}
+          onConfirmResize={handleConfirmResize}
+          onRevertResize={handleRevertResize}
         />
       ))}
     </div>
