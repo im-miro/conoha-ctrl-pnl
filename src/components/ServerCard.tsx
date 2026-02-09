@@ -182,14 +182,19 @@ export default function ServerCard({
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md">
       {/* ヘッダー */}
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900 truncate mr-3">
-          {server.name}
-        </h3>
-        <div className="flex items-center gap-1.5 shrink-0">
+      <div className="mb-2">
+        <div className="flex items-center gap-1.5 mb-1">
           <BillingBadge flavor={flavor} />
           <StatusBadge status={loading ? "processing" : server.status} />
         </div>
+        <h3 className="text-lg font-bold text-gray-900">
+          {server.metadata.instance_name_tag || server.name}
+        </h3>
+        {server.metadata.instance_name_tag && (
+          <p className="text-sm font-semibold text-gray-600">
+            {server.name}
+          </p>
+        )}
       </div>
 
       {/* スペック行 */}
@@ -329,6 +334,7 @@ export default function ServerCard({
         {detailOpen && (
           <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs space-y-0.5">
             <DetailRow label="サーバーID" value={server.id} mono />
+            <DetailRow label="サーバー名" value={server.name} mono />
             <DetailRow label="ステータス" value={server.status} />
             <DetailRow label="VM状態" value={server["OS-EXT-STS:vm_state"]} />
             <DetailRow
