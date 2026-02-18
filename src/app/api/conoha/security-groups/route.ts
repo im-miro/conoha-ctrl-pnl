@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getSecurityGroups } from "@/lib/conoha-client";
+import { getAllSecurityGroups } from "@/lib/conoha-client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const groups = await getSecurityGroups();
+    const groups = await getAllSecurityGroups();
     return NextResponse.json({ security_groups: groups });
   } catch (error) {
     const message =

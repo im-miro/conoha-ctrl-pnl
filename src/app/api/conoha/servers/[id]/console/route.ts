@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConsoleUrl } from "@/lib/conoha-client";
+import { getClient } from "@/lib/conoha-client";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const url = await getConsoleUrl(id);
+    const body = await request.json();
+    const accountId = body.accountId as string;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
+
+    const client = getClient(accountId);
+    const url = await client.getConsoleUrl(id);
     return NextResponse.json({ url });
   } catch (error) {
     const message =

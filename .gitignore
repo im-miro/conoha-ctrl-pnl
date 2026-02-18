@@ -34,6 +34,8 @@ yarn-error.log*
 .env*
 
 # credentials
+config/v2/*.json
+config/v3/*.json
 config/conoha-credentials.json
 secrets.json
 
