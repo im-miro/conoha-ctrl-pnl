@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addSecurityGroup, removeSecurityGroup } from "@/lib/conoha-client";
+import { getClient } from "@/lib/conoha-client";
 
 export async function POST(
   request: NextRequest,
@@ -7,8 +7,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const { sgId } = await request.json();
-    await addSecurityGroup(id, sgId);
+    const { sgId, accountId } = await request.json();
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
+
+    const client = getClient(accountId);
+    await client.addSecurityGroup(id, sgId);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =
@@ -24,8 +33,17 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { sgId } = await request.json();
-    await removeSecurityGroup(id, sgId);
+    const { sgId, accountId } = await request.json();
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
+
+    const client = getClient(accountId);
+    await client.removeSecurityGroup(id, sgId);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =

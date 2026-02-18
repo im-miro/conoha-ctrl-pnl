@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getServers } from "@/lib/conoha-client";
+import { getAllServers } from "@/lib/conoha-client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const servers = await getServers();
+    const servers = await getAllServers();
     return NextResponse.json({ servers });
   } catch (error) {
     const message =

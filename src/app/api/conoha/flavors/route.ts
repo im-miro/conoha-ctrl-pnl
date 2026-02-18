@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getFlavorList } from "@/lib/conoha-client";
+import { getAllFlavors } from "@/lib/conoha-client";
 
 export async function GET() {
   try {
-    const flavors = await getFlavorList();
+    const flavors = await getAllFlavors();
     return NextResponse.json({ flavors });
   } catch (error) {
     const message =

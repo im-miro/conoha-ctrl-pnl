@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { confirmResize, revertResize } from "@/lib/conoha-client";
+import { getClient } from "@/lib/conoha-client";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    await confirmResize(id);
+    const body = await request.json();
+    const accountId = body.accountId as string;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
+
+    const client = getClient(accountId);
+    await client.confirmResize(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =
@@ -18,12 +29,23 @@ export async function POST(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    await revertResize(id);
+    const body = await request.json();
+    const accountId = body.accountId as string;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
+
+    const client = getClient(accountId);
+    await client.revertResize(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =

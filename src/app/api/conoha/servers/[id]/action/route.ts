@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { executeServerAction, ServerAction } from "@/lib/conoha-client";
+import { getClient, ServerAction } from "@/lib/conoha-client";
 
 const VALID_ACTIONS: ServerAction[] = ["start", "stop", "reboot", "force-stop"];
 
@@ -11,6 +11,14 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const action = body.action as ServerAction;
+    const accountId = body.accountId as string;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
 
     if (!VALID_ACTIONS.includes(action)) {
       return NextResponse.json(
@@ -19,7 +27,8 @@ export async function POST(
       );
     }
 
-    await executeServerAction(id, action);
+    const client = getClient(accountId);
+    await client.executeServerAction(id, action);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =
