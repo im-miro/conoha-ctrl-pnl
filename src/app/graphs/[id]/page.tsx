@@ -1,8 +1,8 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -37,6 +37,31 @@ interface DiskResponse {
 interface NetworkResponse {
   interface: GraphData;
   error?: string;
+}
+
+function useDark() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    setDark(el.classList.contains("dark"));
+    const observer = new MutationObserver(() => {
+      setDark(el.classList.contains("dark"));
+    });
+    observer.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+function chartColors(dark: boolean) {
+  return {
+    grid: dark ? "#374151" : "#e5e7eb",
+    axis: dark ? "#4b5563" : "#d1d5db",
+    tick: dark ? "#9ca3af" : "#9ca3af",
+    tooltipBg: dark ? "#1f2937" : "#ffffff",
+    tooltipBorder: dark ? "#374151" : "#e5e7eb",
+    tooltipText: dark ? "#e5e7eb" : "#111827",
+  };
 }
 
 type RangeKey = "1h" | "6h" | "24h" | "7d";
@@ -77,12 +102,12 @@ function formatBytes(bytes: number | null): string {
   return `${bytes.toFixed(0)} B/s`;
 }
 
-function buildParams(range: RangeKey): string {
+function buildParams(range: RangeKey, accountId: string): string {
   const r = RANGES.find((r) => r.key === range)!;
   // 60秒単位に丸めてSWRキーの無限更新を防止
   const end = Math.floor(Date.now() / 60000) * 60;
   const start = end - r.seconds;
-  return `start=${start}&end=${end}&mode=AVERAGE`;
+  return `start=${start}&end=${end}&mode=AVERAGE&accountId=${encodeURIComponent(accountId)}`;
 }
 
 function hasNonNullValues(data: (number | null)[][], valueIndices: number[]): boolean {
@@ -117,15 +142,16 @@ function Spinner() {
 
 function ErrorBox({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400">
       {message}
     </div>
   );
 }
 
-function CpuChart({ serverId, range }: { serverId: string; range: RangeKey }) {
+function CpuChart({ serverId, range, accountId, dark }: { serverId: string; range: RangeKey; accountId: string; dark: boolean }) {
+  const colors = chartColors(dark);
   const { data, error, isLoading } = useSWR<CpuResponse>(
-    `/api/conoha/servers/${serverId}/graphs/cpu?${buildParams(range)}`,
+    `/api/conoha/servers/${serverId}/graphs/cpu?${buildParams(range, accountId)}`,
     fetcher<CpuResponse>,
     { refreshInterval: 60000 }
   );
@@ -163,26 +189,28 @@ function CpuChart({ serverId, range }: { serverId: string; range: RangeKey }) {
             <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
         <XAxis
           dataKey="time"
           tickFormatter={isLongRange ? formatDateTime : formatTime}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <YAxis
           domain={[0, "auto"]}
           tickFormatter={(v) => `${v.toFixed(0)}%`}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <Tooltip
           labelFormatter={(v) => formatDateTime(v as number)}
           formatter={(v) => [`${Number(v ?? 0).toFixed(1)}%`, "CPU"]}
           contentStyle={{
             borderRadius: "8px",
-            border: "1px solid #e5e7eb",
+            border: `1px solid ${colors.tooltipBorder}`,
             fontSize: 12,
+            backgroundColor: colors.tooltipBg,
+            color: colors.tooltipText,
           }}
         />
         <Area
@@ -201,12 +229,16 @@ function CpuChart({ serverId, range }: { serverId: string; range: RangeKey }) {
 function DiskChart({
   serverId,
   range,
+  accountId,
+  dark,
 }: {
   serverId: string;
   range: RangeKey;
+  accountId: string;
+  dark: boolean;
 }) {
   const { data, error, isLoading } = useSWR<DiskResponse>(
-    `/api/conoha/servers/${serverId}/graphs/disk?${buildParams(range)}`,
+    `/api/conoha/servers/${serverId}/graphs/disk?${buildParams(range, accountId)}`,
     fetcher<DiskResponse>,
     { refreshInterval: 60000 }
   );
@@ -219,6 +251,7 @@ function DiskChart({
   if (!data?.disk?.data?.length || !hasNonNullValues(data.disk.data, [1, 2]))
     return <ErrorBox message="ディスクIO データがありません（サーバーが停止中の可能性があります）" />;
 
+  const colors = chartColors(dark);
   const chartData = data.disk.data
     .filter((row) => row[0] != null)
     .map((row) => ({
@@ -232,17 +265,17 @@ function DiskChart({
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
         <XAxis
           dataKey="time"
           tickFormatter={isLongRange ? formatDateTime : formatTime}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <YAxis
           tickFormatter={(v) => formatBytes(v)}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <Tooltip
           labelFormatter={(v) => formatDateTime(v as number)}
@@ -252,8 +285,10 @@ function DiskChart({
           ]}
           contentStyle={{
             borderRadius: "8px",
-            border: "1px solid #e5e7eb",
+            border: `1px solid ${colors.tooltipBorder}`,
             fontSize: 12,
+            backgroundColor: colors.tooltipBg,
+            color: colors.tooltipText,
           }}
         />
         <Legend />
@@ -283,12 +318,16 @@ function DiskChart({
 function NetworkChart({
   serverId,
   range,
+  accountId,
+  dark,
 }: {
   serverId: string;
   range: RangeKey;
+  accountId: string;
+  dark: boolean;
 }) {
   const { data, error, isLoading } = useSWR<NetworkResponse>(
-    `/api/conoha/servers/${serverId}/graphs/network?${buildParams(range)}`,
+    `/api/conoha/servers/${serverId}/graphs/network?${buildParams(range, accountId)}`,
     fetcher<NetworkResponse>,
     { refreshInterval: 60000 }
   );
@@ -303,6 +342,7 @@ function NetworkChart({
   if (!data?.interface?.data?.length || !hasNonNullValues(data.interface.data, [1, 2]))
     return <ErrorBox message="ネットワーク データがありません（サーバーが停止中の可能性があります）" />;
 
+  const colors = chartColors(dark);
   const chartData = data.interface.data
     .filter((row) => row[0] != null)
     .map((row) => ({
@@ -316,17 +356,17 @@ function NetworkChart({
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
         <XAxis
           dataKey="time"
           tickFormatter={isLongRange ? formatDateTime : formatTime}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <YAxis
           tickFormatter={(v) => formatBytes(v)}
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
-          stroke="#d1d5db"
+          tick={{ fontSize: 11, fill: colors.tick }}
+          stroke={colors.axis}
         />
         <Tooltip
           labelFormatter={(v) => formatDateTime(v as number)}
@@ -336,8 +376,10 @@ function NetworkChart({
           ]}
           contentStyle={{
             borderRadius: "8px",
-            border: "1px solid #e5e7eb",
+            border: `1px solid ${colors.tooltipBorder}`,
             fontSize: 12,
+            backgroundColor: colors.tooltipBg,
+            color: colors.tooltipText,
           }}
         />
         <Legend />
@@ -366,17 +408,30 @@ function NetworkChart({
 
 export default function GraphsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const serverId = params.id as string;
+  const accountId = searchParams.get("accountId") ?? "";
   const [range, setRange] = useState<RangeKey>("1h");
+  const dark = useDark();
+
+  if (!accountId) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 flex items-center justify-center">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400">
+          accountId が指定されていません
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8 transition-colors">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             サーバーモニタリング
           </h1>
-          <div className="flex gap-1 rounded-lg bg-white border border-gray-200 p-1">
+          <div className="flex gap-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-1">
             {RANGES.map((r) => (
               <button
                 key={r.key}
@@ -384,7 +439,7 @@ export default function GraphsPage() {
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   range === r.key
                     ? "bg-indigo-600 text-white"
-                    : "text-gray-600 hover:bg-gray-100"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
               >
                 {r.label}
@@ -394,30 +449,30 @@ export default function GraphsPage() {
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-semibold text-gray-800">
+          <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold text-gray-800 dark:text-gray-200">
               CPU 使用率
             </h2>
-            <CpuChart serverId={serverId} range={range} />
+            <CpuChart serverId={serverId} range={range} accountId={accountId} dark={dark} />
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-semibold text-gray-800">
+          <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold text-gray-800 dark:text-gray-200">
               ディスク I/O
             </h2>
-            <DiskChart serverId={serverId} range={range} />
+            <DiskChart serverId={serverId} range={range} accountId={accountId} dark={dark} />
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-semibold text-gray-800">
+          <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold text-gray-800 dark:text-gray-200">
               ネットワーク トラフィック
             </h2>
-            <NetworkChart serverId={serverId} range={range} />
+            <NetworkChart serverId={serverId} range={range} accountId={accountId} dark={dark} />
           </section>
         </div>
 
-        <div className="mt-6 text-center text-xs text-gray-400">
-          サーバーID: {serverId}
+        <div className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500">
+          サーバーID: {serverId} / アカウント: {accountId}
         </div>
       </div>
     </div>

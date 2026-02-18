@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resizeServer } from "@/lib/conoha-client";
+import { getClient } from "@/lib/conoha-client";
 
 export async function POST(
   request: NextRequest,
@@ -8,7 +8,14 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { flavorId } = body;
+    const { flavorId, accountId } = body;
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "accountId が必要です" },
+        { status: 400 }
+      );
+    }
 
     if (!flavorId || typeof flavorId !== "string") {
       return NextResponse.json(
@@ -17,7 +24,8 @@ export async function POST(
       );
     }
 
-    await resizeServer(id, flavorId);
+    const client = getClient(accountId);
+    await client.resizeServer(id, flavorId);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message =

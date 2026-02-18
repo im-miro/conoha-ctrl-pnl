@@ -4,15 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "es-toolkit": "^1.44.0",
     "next": "15.5.12",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "recharts": "^3.7.0",
+    "recharts": "^2.15.4",
     "swr": "^2.4.0"
   },
   "devDependencies": {

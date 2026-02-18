@@ -8,13 +8,13 @@ interface ServerCardProps {
   server: Server;
   allSecurityGroups: SecurityGroup[];
   flavors: FlavorDetail[];
-  onAction: (serverId: string, action: ServerAction) => Promise<void>;
-  onConsole: (serverId: string) => Promise<void>;
-  onAddSG: (serverId: string, sgId: string) => Promise<void>;
-  onRemoveSG: (serverId: string, sgId: string) => Promise<void>;
-  onResize: (serverId: string, flavorId: string) => Promise<void>;
-  onConfirmResize: (serverId: string) => Promise<void>;
-  onRevertResize: (serverId: string) => Promise<void>;
+  onAction: (serverId: string, action: ServerAction, accountId: string) => Promise<void>;
+  onConsole: (serverId: string, accountId: string) => Promise<void>;
+  onAddSG: (serverId: string, sgId: string, accountId: string) => Promise<void>;
+  onRemoveSG: (serverId: string, sgId: string, accountId: string) => Promise<void>;
+  onResize: (serverId: string, flavorId: string, accountId: string) => Promise<void>;
+  onConfirmResize: (serverId: string, accountId: string) => Promise<void>;
+  onRevertResize: (serverId: string, accountId: string) => Promise<void>;
 }
 
 function getIpAddresses(
@@ -63,7 +63,7 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="ml-1 rounded p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+      className="ml-1 rounded p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700 transition-colors"
       title="コピー"
     >
       {copied ? (
@@ -95,15 +95,15 @@ function detectBillingType(flavorName?: string): BillingType {
 const BILLING_CONFIG: Record<BillingType, { label: string; className: string }> = {
   hourly: {
     label: "時間課金",
-    className: "bg-cyan-100 text-cyan-800 border-cyan-300",
+    className: "bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900/50 dark:text-cyan-300 dark:border-cyan-700",
   },
   monthly: {
     label: "まとめ払い",
-    className: "bg-purple-100 text-purple-800 border-purple-300",
+    className: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700",
   },
   reserved: {
     label: "リザーブド",
-    className: "bg-orange-100 text-orange-800 border-orange-300",
+    className: "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/50 dark:text-orange-300 dark:border-orange-700",
   },
   unknown: {
     label: "",
@@ -126,12 +126,33 @@ function BillingBadge({ flavor }: { flavor: Server["flavor"] }) {
   );
 }
 
+function AccountBadge({ accountId }: { accountId?: string }) {
+  if (!accountId) return null;
+  // accountId format: "v2-tyo3" or "v3-c3j1" or "v2-tyo3-600b54ec"
+  const parts = accountId.split("-");
+  const version = parts[0]?.toUpperCase(); // V2 or V3
+  const region = parts.slice(1).join("-"); // tyo3 or c3j1 or tyo3-600b54ec
+
+  const isV2 = version === "V2";
+  const className = isV2
+    ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700"
+    : "bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${className}`}
+    >
+      VPS {version} {region}
+    </span>
+  );
+}
+
 function DetailRow({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   if (!value) return null;
   return (
     <div className="flex items-start gap-2 py-0.5">
-      <span className="text-gray-400 w-28 shrink-0 text-right">{label}</span>
-      <span className={`text-gray-700 break-all ${mono ? "font-mono" : ""}`}>{value}</span>
+      <span className="text-gray-400 dark:text-gray-500 w-28 shrink-0 text-right">{label}</span>
+      <span className={`text-gray-700 dark:text-gray-300 min-w-0 break-all ${mono ? "font-mono" : ""}`}>{value}</span>
     </div>
   );
 }
@@ -156,6 +177,7 @@ export default function ServerCard({
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeLoading, setResizeLoading] = useState(false);
 
+  const accountId = server.accountId!;
   const isActive = server.status === "ACTIVE";
   const isShutoff = server.status === "SHUTOFF";
   const isVerifyResize = server.status === "VERIFY_RESIZE";
@@ -173,25 +195,26 @@ export default function ServerCard({
   async function handleAction(action: ServerAction) {
     setLoading(action);
     try {
-      await onAction(server.id, action);
+      await onAction(server.id, action, accountId);
     } finally {
       setTimeout(() => setLoading(null), 3000);
     }
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
       {/* ヘッダー */}
       <div className="mb-2">
-        <div className="flex items-center gap-1.5 mb-1">
+        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+          <AccountBadge accountId={server.accountId} />
           <BillingBadge flavor={flavor} />
           <StatusBadge status={loading ? "processing" : server.status} />
         </div>
-        <h3 className="text-lg font-bold text-gray-900">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
           {server.metadata.instance_name_tag || server.name}
         </h3>
         {server.metadata.instance_name_tag && (
-          <p className="text-sm font-semibold text-gray-600">
+          <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
             {server.name}
           </p>
         )}
@@ -199,22 +222,22 @@ export default function ServerCard({
 
       {/* スペック行 */}
       {(flavor.vcpus || flavor.ram || diskDisplay) ? (
-        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           {flavor.vcpus && (
             <span className="inline-flex items-center gap-1">
-              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7H7v6h6V7z" /><path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd" /></svg>
+              <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7H7v6h6V7z" /><path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd" /></svg>
               {flavor.vcpus} vCPU
             </span>
           )}
           {flavor.ram && (
             <span className="inline-flex items-center gap-1">
-              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v3H3V5zM3 10h14v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2zm2 1a1 1 0 100 2h1a1 1 0 100-2H5z" /></svg>
+              <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v3H3V5zM3 10h14v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2zm2 1a1 1 0 100 2h1a1 1 0 100-2H5z" /></svg>
               {formatRam(flavor.ram)}
             </span>
           )}
           {diskDisplay && (
             <span className="inline-flex items-center gap-1">
-              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 11.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" /></svg>
+              <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 11.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" /></svg>
               {diskDisplay} GB{!flavor.disk && totalVolumeSizeGB ? " (Volume)" : ""}
             </span>
           )}
@@ -224,13 +247,13 @@ export default function ServerCard({
       )}
 
       {/* IP アドレス */}
-      <div className="mb-3 space-y-1 text-sm text-gray-600">
+      <div className="mb-3 space-y-1 text-sm text-gray-600 dark:text-gray-300">
         {ipAddresses.map((ip) => (
           <div key={ip.addr} className="flex items-center gap-2">
             <span className="text-gray-400 w-8 shrink-0">
               {ip.version === 4 ? "IPv4" : "IPv6"}
             </span>
-            <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs font-mono">
+            <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs font-mono dark:bg-gray-700/50">
               {ip.addr}
             </code>
             {ip.version === 4 && <CopyButton text={ip.addr} />}
@@ -240,7 +263,7 @@ export default function ServerCard({
 
       {/* ホスト（網掛け外） */}
       {host && (
-        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+        <div className="mb-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           <span className="text-gray-400">ホスト:</span>
           <span className="font-mono">{host}</span>
         </div>
@@ -249,10 +272,10 @@ export default function ServerCard({
       {/* セキュリティグループ */}
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs text-gray-400">セキュリティグループ</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">セキュリティグループ</span>
           <button
             onClick={() => setSgOpen(!sgOpen)}
-            className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
+            className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
           >
             {sgOpen ? "閉じる" : "編集"}
           </button>
@@ -264,7 +287,7 @@ export default function ServerCard({
           {currentSGs.map((sg) => (
             <span
               key={sg.id}
-              className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs text-indigo-700"
+              className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-300"
             >
               {sg.name}
               {sgOpen && (
@@ -272,7 +295,7 @@ export default function ServerCard({
                   onClick={async () => {
                     setSgLoading(true);
                     try {
-                      await onRemoveSG(server.id, sg.id);
+                      await onRemoveSG(server.id, sg.id, accountId);
                     } finally {
                       setSgLoading(false);
                     }
@@ -297,13 +320,13 @@ export default function ServerCard({
                 onClick={async () => {
                   setSgLoading(true);
                   try {
-                    await onAddSG(server.id, sg.id);
+                    await onAddSG(server.id, sg.id, accountId);
                   } finally {
                     setSgLoading(false);
                   }
                 }}
                 disabled={sgLoading}
-                className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-indigo-500 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/30"
                 title={sg.description || sg.name}
               >
                 <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
@@ -320,7 +343,7 @@ export default function ServerCard({
       <div className="mb-3">
         <button
           onClick={() => setDetailOpen(!detailOpen)}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
         >
           <svg
             className={`h-3.5 w-3.5 transition-transform duration-200 ${detailOpen ? "rotate-90" : ""}`}
@@ -332,7 +355,8 @@ export default function ServerCard({
           詳細情報
         </button>
         {detailOpen && (
-          <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs space-y-0.5">
+          <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs space-y-0.5 overflow-hidden dark:border-gray-700 dark:bg-gray-900/50">
+            <DetailRow label="アカウントID" value={server.accountId} mono />
             <DetailRow label="サーバーID" value={server.id} mono />
             <DetailRow label="サーバー名" value={server.name} mono />
             <DetailRow label="ステータス" value={server.status} />
@@ -364,9 +388,9 @@ export default function ServerCard({
             {(server.volumes ?? []).length > 0 && (
               <div className="flex items-start gap-2 py-0.5">
                 <span className="text-gray-400 w-28 shrink-0 text-right">ボリューム</span>
-                <div className="space-y-1">
+                <div className="space-y-1 min-w-0">
                   {server.volumes!.map((v) => (
-                    <div key={v.id} className="text-gray-700">
+                    <div key={v.id} className="text-gray-700 dark:text-gray-300">
                       <span className="font-medium">{v.size} GB</span>
                       <span className="ml-1.5 text-gray-400">({v.status})</span>
                       {v.volume_type && <span className="ml-1.5 text-gray-400">[{v.volume_type}]</span>}
@@ -381,9 +405,9 @@ export default function ServerCard({
             {ipAddresses.some((ip) => ip.mac) && (
               <div className="flex items-start gap-2 py-0.5">
                 <span className="text-gray-400 w-28 shrink-0 text-right">NIC</span>
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 min-w-0">
                   {ipAddresses.filter((ip) => ip.mac && ip.version === 4).map((ip) => (
-                    <div key={ip.mac} className="text-gray-700">
+                    <div key={ip.mac} className="text-gray-700 dark:text-gray-300">
                       <span className="font-mono">{ip.mac}</span>
                       {ip.type && <span className="ml-1.5 text-gray-400">({ip.type})</span>}
                     </div>
@@ -394,9 +418,9 @@ export default function ServerCard({
             {Object.keys(server.metadata).length > 0 && (
               <div className="flex items-start gap-2 py-0.5">
                 <span className="text-gray-400 w-28 shrink-0 text-right">メタデータ</span>
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 min-w-0">
                   {Object.entries(server.metadata).map(([k, v]) => (
-                    <div key={k} className="text-gray-700">
+                    <div key={k} className="text-gray-700 dark:text-gray-300 break-all">
                       <span className="text-gray-400">{k}:</span> {v}
                     </div>
                   ))}
@@ -412,7 +436,7 @@ export default function ServerCard({
         <div className="mb-3">
           <button
             onClick={() => setResizeOpen(!resizeOpen)}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
           >
             <svg
               className={`h-3.5 w-3.5 transition-transform duration-200 ${resizeOpen ? "rotate-90" : ""}`}
@@ -424,8 +448,8 @@ export default function ServerCard({
             プラン変更
           </button>
           {resizeOpen && (
-            <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
-              <p className="text-xs text-gray-500 mb-2">変更先のプランを選択してください</p>
+            <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">変更先のプランを選択してください</p>
               <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
                 {flavors
                   .filter((f) => f.id !== server.flavor.id)
@@ -435,17 +459,17 @@ export default function ServerCard({
                       onClick={async () => {
                         setResizeLoading(true);
                         try {
-                          await onResize(server.id, f.id);
+                          await onResize(server.id, f.id, accountId);
                           setResizeOpen(false);
                         } finally {
                           setResizeLoading(false);
                         }
                       }}
                       disabled={resizeLoading}
-                      className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-xs hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50 transition-colors text-left"
+                      className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-xs hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50 transition-colors text-left dark:border-gray-600 dark:bg-gray-800 dark:hover:border-indigo-500 dark:hover:bg-indigo-900/30"
                     >
-                      <span className="font-medium text-gray-800">{f.name}</span>
-                      <span className="text-gray-500 ml-2 shrink-0">
+                      <span className="font-medium text-gray-800 dark:text-gray-200">{f.name}</span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-2 shrink-0">
                         {f.vcpus}vCPU / {formatRam(f.ram)} / {f.disk}GB
                       </span>
                     </button>
@@ -458,14 +482,14 @@ export default function ServerCard({
 
       {/* VERIFY_RESIZE 確認・取消 */}
       {isVerifyResize && (
-        <div className="mb-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-          <p className="text-xs text-yellow-800 mb-2 font-medium">リサイズの確認が必要です</p>
+        <div className="mb-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-700 dark:bg-yellow-900/30">
+          <p className="text-xs text-yellow-800 dark:text-yellow-300 mb-2 font-medium">リサイズの確認が必要です</p>
           <div className="flex gap-2">
             <button
               onClick={async () => {
                 setResizeLoading(true);
                 try {
-                  await onConfirmResize(server.id);
+                  await onConfirmResize(server.id, accountId);
                 } finally {
                   setResizeLoading(false);
                 }
@@ -485,7 +509,7 @@ export default function ServerCard({
               onClick={async () => {
                 setResizeLoading(true);
                 try {
-                  await onRevertResize(server.id);
+                  await onRevertResize(server.id, accountId);
                 } finally {
                   setResizeLoading(false);
                 }
@@ -549,7 +573,7 @@ export default function ServerCard({
             onClick={async () => {
               setConsoleLoading(true);
               try {
-                await onConsole(server.id);
+                await onConsole(server.id, accountId);
               } finally {
                 setConsoleLoading(false);
               }
@@ -564,14 +588,14 @@ export default function ServerCard({
             label="グラフ"
             action="graph"
             loading={null}
-            onClick={() => window.open(`/graphs/${server.id}`, "_blank")}
+            onClick={() => window.open(`/graphs/${server.id}?accountId=${encodeURIComponent(accountId)}`, "_blank")}
             variant="outline"
             color="indigo"
             icon={<svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" /></svg>}
           />
         )}
         {isTransitioning && (
-          <span className="col-span-2 text-sm text-yellow-600 flex items-center justify-center gap-1.5 py-2">
+          <span className="col-span-2 text-sm text-yellow-600 dark:text-yellow-400 flex items-center justify-center gap-1.5 py-2">
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -590,33 +614,33 @@ type ButtonVariant = "solid" | "outline" | "ghost";
 const COLOR_STYLES: Record<ButtonColor, Record<ButtonVariant, string>> = {
   green: {
     solid: "bg-green-600 hover:bg-green-700 text-white shadow-sm",
-    outline: "border border-green-300 text-green-700 hover:bg-green-50",
-    ghost: "text-green-700 hover:bg-green-50",
+    outline: "border border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/30",
+    ghost: "text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30",
   },
   gray: {
     solid: "bg-gray-600 hover:bg-gray-700 text-white shadow-sm",
-    outline: "border border-gray-300 text-gray-700 hover:bg-gray-50",
-    ghost: "text-gray-600 hover:bg-gray-100",
+    outline: "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700/50",
+    ghost: "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700/50",
   },
   blue: {
     solid: "bg-blue-600 hover:bg-blue-700 text-white shadow-sm",
-    outline: "border border-blue-300 text-blue-700 hover:bg-blue-50",
-    ghost: "text-blue-700 hover:bg-blue-50",
+    outline: "border border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30",
+    ghost: "text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30",
   },
   red: {
     solid: "bg-red-600 hover:bg-red-700 text-white shadow-sm",
-    outline: "border border-red-300 text-red-700 hover:bg-red-50",
-    ghost: "text-red-600 hover:bg-red-50",
+    outline: "border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30",
+    ghost: "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30",
   },
   amber: {
     solid: "bg-amber-500 hover:bg-amber-600 text-white shadow-sm",
-    outline: "border border-amber-300 text-amber-700 hover:bg-amber-50",
-    ghost: "text-amber-700 hover:bg-amber-50",
+    outline: "border border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30",
+    ghost: "text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30",
   },
   indigo: {
     solid: "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm",
-    outline: "border border-indigo-300 text-indigo-700 hover:bg-indigo-50",
-    ghost: "text-indigo-700 hover:bg-indigo-50",
+    outline: "border border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-900/30",
+    ghost: "text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30",
   },
 };
 
